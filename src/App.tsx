@@ -1,14 +1,15 @@
-import { FC, useState } from "react";
+import { FC, useState, useEffect } from "react";
 import { OrderedMap } from "immutable";
 import { Link, Route } from "wouter";
-import './App.css'
+import './App-compiled.css'
 import { Session } from "@supabase/supabase-js";
 import { SessionContext } from "./SessionContext";
 import { useVarContext, JsosContextProvider } from "jsos-js";
 import Auth from "./Auth";
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import supabase from "./lib/supabase"
+import ThoughtBox from "./ThoughtBox";
+//import supabase from "./lib/supabase"
 
 const darkTheme = createTheme({
     palette: {
@@ -28,7 +29,7 @@ type ThoughtChangeHistory = Thought[]; // newest first
 type AgentName = string;
 type Agent = {name: string, thoughts: [Thought, ThoughtChangeHistory][]};
 type AgentMap = OrderedMap<AgentName, Agent>;
-type AppState = {
+export type AppState = {
     selectedAgentName: string | null, // Name of selected agent
     getSelectedAgent(): Agent | undefined,
     selectedThoughtIndex: number | null, // index into appState.agents[appState.selectedAgent].thoughts
@@ -68,15 +69,24 @@ const defaultAppState: AppState = {
                     ]
                 ]
             }
+        ], [
+            "Very Vivid Vander",
+            {
+                name: "Very Vivid Vander",
+                thoughts: []
+            }
         ]
     ])
 };
 
 const Header: FC = () => {
-    const varContextObj = useVarContext();
-    const appState = varContextObj[0] as AppState
-    const setAppState = varContextObj[1]
+    const [appState, setAppState]  = useVarContext() as [AppState, (updateFn: (old: AppState) => AppState) => void];
     const selectedAgent = appState.getSelectedAgent();
+
+    useEffect(() => {
+        console.log("appState updated: ", appState);
+    }, [appState]);
+
     return (
         <div className="md:col-span-2 w-screen md:flex border-b border-gray-700">
             <svg
@@ -114,18 +124,21 @@ const Header: FC = () => {
                     className="bg-[#121212] border border-gray-600 px-2 m-2"
                     value={selectedAgent.name}
                     onChange={(event) => {
-                        console.log("selected agent changed: ", event.target.value);
-                        if(event.target.value) {
-                            setAppState((old: AppState) => ({
+                        const newAgentNameSelected = event.target.value;
+                        if(newAgentNameSelected ) {
+                            setAppState((old: AppState) => {
+                                const newVal = {
                                 ...old,
-                                selectedAgentName: event.target.value
-                            }))
+                                selectedAgentName: newAgentNameSelected
+                                }
+                                return newVal;
+                            })
                         }
                     }}
                 >
-                    {appState.agents.map((agent, uuid) => (
-                        <option key={uuid} value={uuid}>
-                            {agent.name}
+                    {[...appState.agents.keys()].map((agentName) => (
+                        <option key={agentName} value={agentName}>
+                            {agentName}
                         </option>
                     ))}
                 </select>
@@ -161,18 +174,20 @@ const Footer = ({ session }: { session: Session | null }) => {
 };
 
 function App() {
-    const [session, setSession] = useState<Session | null>(null);
+    const [session] = useState<Session | null>(null);
     return (
         <ThemeProvider theme={darkTheme}>
             <CssBaseline />
             <SessionContext.Provider value={session}>
                 <JsosContextProvider name="headlong" namespace="headlong-vite" defaultVal={defaultAppState}>
                 <div className="container 2 md:h-screen md:grid md:gap-3 md:grid-cols-2 grid-rows-[50px_minmax(300px,_1fr)_30px]">
+                    <Header/>
                     <Route path="/">
-                        <Header/>
-                        <div className="overflow-auto grid grid-rows-[1fr_60px]">MAIN</div>
-                        <Footer session={session} />
+                        <div className="overflow-auto grid grid-rows-[1fr_60px]">
+                            <ThoughtBox/>
+                        </div>
                     </Route>
+                    <Footer session={session} />
                 </div>
                 </JsosContextProvider>
             </SessionContext.Provider>

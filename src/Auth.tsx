@@ -12,7 +12,7 @@ export default function Auth() {
     }
 
     useEffect(() => {
-        async function load() {
+        async function doAuth() {
             const { error } = await supabase.auth.signInWithOtp({
                 email: email,
                 options: { emailRedirectTo: currentUrl},
@@ -24,7 +24,9 @@ export default function Auth() {
                 setLoading(false);
             }
         }
-        load();
+        if (loading) {
+            doAuth();
+        }
     }, [loading, email, currentUrl])
 
     return (
