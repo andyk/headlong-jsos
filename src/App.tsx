@@ -4,7 +4,7 @@ import { Link, Route } from "wouter";
 import './App-compiled.css'
 import { Session } from "@supabase/supabase-js";
 import { SessionContext } from "./SessionContext";
-import { useVarContext, JsosContextProvider } from "jsos-js";
+import { useVarContext, JsosContextProvider, JsosUI } from "jsos-js";
 import Auth from "./Auth";
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
@@ -20,68 +20,113 @@ const darkTheme = createTheme({
 type ThoughtContext = { [key: string]: string}; 
 type Thought = {
     timestamp: Date,
-    label: string,
     body: string,
     context: ThoughtContext,
     open_ai_embedding: number[],
 }
 type ThoughtChangeHistory = Thought[]; // newest first
 type AgentName = string;
-type Agent = {name: string, thoughts: [Thought, ThoughtChangeHistory][]};
+type ThoughtList = [Thought, ThoughtChangeHistory][];
+type Agent = {name: string, thoughts: ThoughtList};
 type AgentMap = OrderedMap<AgentName, Agent>;
-export type AppState = {
-    selectedAgentName: string | null, // Name of selected agent
-    getSelectedAgent(): Agent | undefined,
-    selectedThoughtIndex: number | null, // index into appState.agents[appState.selectedAgent].thoughts
-    getSelectedThought(): Thought | undefined,
-    agents: AgentMap
-};
-const defaultAppState: AppState = {
-    selectedAgentName: "zany zoo zonker",
-    getSelectedAgent: function() {
-        if (this.selectedAgentName === null) {
+
+export class AppState {
+    _selectedAgentName: string | null; // Name of selected agent
+    _selectedThoughtIndex: number | null; // index into appState.agents[appState.selectedAgent].thoughts
+    agents: AgentMap;
+    constructor(selectedAgentName?: string | null, selectedThoughtIndex?: number | null, agents?: AgentMap | null) {
+        this._selectedAgentName = selectedAgentName ?? null;
+        this._selectedThoughtIndex = selectedThoughtIndex ?? null;
+        this.agents = agents ?? OrderedMap();
+    }
+    copy(
+        options: {
+            selectedAgentName?: string | null;
+            selectedThoughtIndex?: number | null;
+            agents?: AgentMap | null
+        }
+    ) {
+        // https://stackoverflow.com/questions/64638771/how-can-i-create-a-new-instance-of-a-class-using-this-from-within-method
+        // till we support closing over global state, functions need to close over only state attached to `this`.
+        return new (this.constructor as new (
+            selectedAgentName?: string | null,
+            selectedThoughtIndex?: number | null,
+            agents?: AgentMap | null
+        ) => this)(
+            options.selectedAgentName ?? this._selectedAgentName,
+            options.selectedThoughtIndex ?? this._selectedThoughtIndex,
+            options.agents ?? this.agents
+        );
+    }
+    selectedAgent(): Agent | undefined {
+        if (this._selectedAgentName === null) {
             return
         }
-        return this.agents.get(this.selectedAgentName);
-    },
-    selectedThoughtIndex: 0,
-    getSelectedThought: function() {
-        if (this.selectedAgentName === null) {
+        return this.agents.get(this._selectedAgentName);
+    }
+    selectedThought(): Thought | undefined {
+        if (this._selectedAgentName === null) {
             return
         }
-        return this.agents.getIn([this.selectedAgentName, "thoughts", this.selectedThoughtIndex]) as Thought;
-    },
-    agents: OrderedMap([
-        [
-            "zany zoo zonker", // AgentName
-            { // Agent
-                name: "zany zoo zonker",
-                thoughts: [
-                    [
-                        { // Thought
-                            timestamp: new Date(),
-                            label: "thought",
-                            body: "hi",
-                            context: {},
-                            open_ai_embedding: [],
-                        },
-                        [] // ThoughtChangeHistory
-                    ]
+        return this.agents.getIn([this._selectedAgentName, "thoughts", this._selectedThoughtIndex]) as Thought;
+    }
+    setSelectedAgent(selectedAgentName: string) {   
+        return this.copy({selectedAgentName});
+    }
+    setSelectedThough(selectedThoughtIndex: number) {   
+        return this.copy({selectedThoughtIndex})
+    }
+    addAgent(agent: Agent) {
+        const agents = this.agents.set(agent.name, agent);
+        if (agents.size === 1) {
+            return this.copy({selectedAgentName: agent.name, agents: agents});
+        }
+        return this.copy({agents})
+    }
+    addThought(thought: string) {
+        let selectedThoughtIndex = 0;
+        const agents = this.agents.updateIn(
+            [this._selectedAgentName, "thoughts"],
+            (thoughts) => {
+                console.log("in this.agents.updateIn, thoughts: ", thoughts)
+                const castedThoughts = thoughts as ThoughtList;
+                selectedThoughtIndex = castedThoughts.length;
+                console.log("updating selectedThoughtIndex to: ", selectedThoughtIndex)
+                return [
+                    ...castedThoughts,
+                    [{
+                        timestamp: new Date(),
+                        body: thought,
+                        context: {},
+                        open_ai_embedding: [],
+                    }, []]
                 ]
             }
-        ], [
-            "Very Vivid Vander",
-            {
-                name: "Very Vivid Vander",
-                thoughts: []
+        )
+        return this.copy({agents, selectedThoughtIndex})
+    }
+    updateSelectedThought(newThoughtStr: string) {
+        if (this._selectedThoughtIndex === null) {
+            return
+        }
+        const agents = this.agents.updateIn(
+            [this._selectedAgentName, "thoughts", this._selectedThoughtIndex, 0],
+            (thought) => {
+                const castedThought = thought as Thought;
+                return {
+                    ...castedThought,
+                    body: newThoughtStr
+                }
             }
-        ]
-    ])
-};
+        )
+        return this.copy({agents})
+    }
+}
+const defaultAppStateInst = new AppState().addAgent({name: "zany zoo zepplin", thoughts: []}).addThought("some Thought");
 
 const Header: FC = () => {
     const [appState, setAppState]  = useVarContext() as [AppState, (updateFn: (old: AppState) => AppState) => void];
-    const selectedAgent = appState.getSelectedAgent();
+    const selectedAgent = appState.selectedAgent();
 
     useEffect(() => {
         console.log("appState updated: ", appState);
@@ -125,14 +170,10 @@ const Header: FC = () => {
                     value={selectedAgent.name}
                     onChange={(event) => {
                         const newAgentNameSelected = event.target.value;
-                        if(newAgentNameSelected ) {
-                            setAppState((old: AppState) => {
-                                const newVal = {
-                                ...old,
-                                selectedAgentName: newAgentNameSelected
-                                }
-                                return newVal;
-                            })
+                        if(newAgentNameSelected) {
+                            setAppState((old: AppState) => 
+                                old.setSelectedAgent(newAgentNameSelected)
+                            )
                         }
                     }}
                 >
@@ -143,9 +184,6 @@ const Header: FC = () => {
                     ))}
                 </select>
             ) : null}
-            <div className="ml-2 my-3 text-gray-400 text-xs">
-                (Agent Name: { appState.getSelectedAgent()?.name })
-            </div>
             <div className="md:flex-auto md:flex md:flex-row-reverse mr-4">
                 <Link
                     to="/thought_builder"
@@ -175,11 +213,12 @@ const Footer = ({ session }: { session: Session | null }) => {
 
 function App() {
     const [session] = useState<Session | null>(null);
+    //const [newThoughtStr, setNewThoughtStr] = useState<string>("");
     return (
         <ThemeProvider theme={darkTheme}>
             <CssBaseline />
             <SessionContext.Provider value={session}>
-                <JsosContextProvider name="headlong" namespace="headlong-vite" defaultVal={defaultAppState}>
+                <JsosContextProvider name="headlong" namespace="headlong-vite-v2" defaultVal={defaultAppStateInst}>
                 <div className="container 2 md:h-screen md:grid md:gap-3 md:grid-cols-2 grid-rows-[50px_minmax(300px,_1fr)_30px]">
                     <Header/>
                     <Route path="/">
@@ -188,111 +227,12 @@ function App() {
                         </div>
                     </Route>
                     <Footer session={session} />
+                    <JsosUI/>
                 </div>
                 </JsosContextProvider>
             </SessionContext.Provider>
         </ThemeProvider>
     );
-
-
-
-//                <div className="container 2 md:h-screen md:grid md:gap-3 md:grid-cols-2 grid-rows-[50px_minmax(300px,_1fr)_30px]">
-//                    <Header
-//                        agents={appState.agents}
-//                        selectedAgent={appState.selectedAgent}
-//                        setSelectedAgent={(newName) =>
-//                            setAppState((appState: AppState) => {
-//                                return {...appState, selectedAgent: newName}
-//                            })
-//                        }
-//                    />
-//                    <Route path="/">
-//                        <div className="overflow-auto grid grid-rows-[1fr_60px]">MAIN</div>
-//                    </Route>
-//                    <Footer session={session} />
-//                </div>
-//            </SessionContext.Provider>
-//        </ThemeProvider>
-//        </JsosContextProvider>
-//    );
-//    return (
-//        <JsosContextProvider name="headlong" namespace="headlong-vite" defaultVal={defaultAppState}>
-//        <ThemeProvider theme={darkTheme}>
-//            <CssBaseline />
-//            <SessionContext.Provider value={session}>
-//                <div className="container 2 md:h-screen md:grid md:gap-3 md:grid-cols-2 grid-rows-[50px_minmax(300px,_1fr)_30px]">
-//                    <Header
-//                        agents={appState.agents}
-//                        selectedAgent={appState.selectedAgent}
-//                        setSelectedAgent={(newName) =>
-//                            setAppState((appState: AppState) => {
-//                                return {...appState, selectedAgent: newName}
-//                            })
-//                        }
-//                    />
-//                    <Route path="/">
-//                        <div className="overflow-auto grid grid-rows-[1fr_60px]">
-//                            <ThoughtBox
-//                                selectedAgent={appState.agents[appState.selectedAgent]}
-//                                selectedAgentThoughts={appState.agents[appState.selectedAgent].thoughts}
-//                                selectedThought={selectedThought}
-//                                setSelectedThoughtUUID={setSelectedThoughtUUID}
-//                                selectedThoughtUUID={selectedThoughtUUID}
-//                                updateSelectedThought={updateSelectedThought}
-//                            />
-//                            <div className="border mt-1 flex">
-//                                <textarea
-//                                    className="bg-black m-1 flex-1 resize-none"
-//                                    value={newThoughtStr}
-//                                    onChange={(e) =>
-//                                        setNewThoughtStr(e.target.value)
-//                                    }
-//                                    onKeyUp={(e) =>
-//                                        e.key === "Enter" && !e.shiftKey
-//                                            ? addNewThought()
-//                                            : null
-//                                    }
-//                                />
-//                            </div>
-//                            <div>
-//                                <button
-//                                    className="flex-none bg-green-900 px-3"
-//                                    onClick={addNewThought}
-//                                >
-//                                    Think it
-//                                </button>
-//                                <button
-//                                    className="flex-none bg-blue-900 px-3"
-//                                    onClick={getNextThought}
-//                                >
-//                                    Auto Generate Thought
-//                                </button>
-//                                <Link
-//                                    className="pl-2 cursor-pointer text-sm underline"
-//                                    to="/thought_builder"
-//                                >
-//                                    Thought Builder
-//                                </Link>
-//                            </div>
-//                        </div>
-//                        <div className="overflow-auto flex">
-//                            <ThoughtDetail
-//                                selectedAgent={selectedAgent}
-//                                selectedThought={selectedThought}
-//                                updateSelectedThought={updateSelectedThought}
-//                                deleteSelectedThought={deleteSelectedThought}
-//                            />
-//                        </div>
-//                    </Route>
-//                    <Route path="/thought_builder">
-//                        <ThoughtBuilder
-//                            addNewThought={addNewThought}
-//                            selectedAgentThoughts={selectedAgentThoughts}
-//                        />
-//                    </Route>
-//                    <Footer session={session} />
-//                </div>
-//    );
 }
 
 export default App
