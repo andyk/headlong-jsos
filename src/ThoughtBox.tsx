@@ -1,7 +1,7 @@
 import { FC, /*useCallback,*/ useEffect, useState, useRef } from "react";
 import ScrollToBottom from "react-scroll-to-bottom";
 import { AppState } from "./App";
-import { useVarContext } from "jsos-js";
+import { useVarContext } from "@andykon/jsos/src";
 
 const ThoughtBox: FC = () => {
     const [appState, setAppState] = useVarContext() as [
