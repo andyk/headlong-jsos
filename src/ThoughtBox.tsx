@@ -1,4 +1,4 @@
-import { FC, /*useCallback,*/ useEffect, useState, useRef } from "react";
+import { FC, useCallback, useEffect, useState, useRef } from "react";
 import ScrollToBottom from "react-scroll-to-bottom";
 import { AppState } from "./App";
 import { useVarContext } from "@andykon/jsos/src";
@@ -20,36 +20,37 @@ const ThoughtBox: FC = () => {
     }, [appState, setLocalThoughtString]);
 
     //const selectNextThought = useCallback(() => {
-    //    const selectedAgent = appState.selectedAgent;
+    //    const selectedAgent = appState.selectedAgent();
+    //    const thoughtIndex = appState._selectedThoughtIndex;
     //    if (
-    //        selectedAgent?.thoughts &&
-    //        appState?.selectedThoughtIndex !== undefined &&
-    //        appState?.selectedThoughtIndex !== null &&
-    //        appState.selectedThoughtIndex < selectedAgent.thoughts.length - 1
+    //        selectedAgent !== undefined &&
+    //        appState.selectedThought() !== undefined &&
+    //        thoughtIndex !== null &&
+    //        thoughtIndex < selectedAgent.thoughts.length - 1
     //    ) {
-    //        setAppState((old: typeof appState) => {
-    //            return {
-    //                ...old,
-    //                selectedThoughtIndex: old.selectedThoughtIndex ?? 0 + 1,
-    //            };
-    //        });
+    //        setAppState(old => 
+    //            old.setSelectedThought(
+    //                old._selectedThoughtIndex ?? 0 + 1
+    //            )
+    //        )
     //    }
     //}, [appState, setAppState]);
 
     //const selectPrevThought = useCallback(() => {
-    //    const selectedAgent = appState.getSelectedAgent();
+    //    console.log("in selectPrevThought")
+    //    const selectedAgent = appState.selectedAgent();
+    //    const thoughtIndex = appState._selectedThoughtIndex;
     //    if (
-    //        selectedAgent?.thoughts &&
-    //        appState?.selectedThoughtIndex !== undefined &&
-    //        appState?.selectedThoughtIndex !== null &&
-    //        appState.selectedThoughtIndex > selectedAgent.thoughts.length - 1
+    //        selectedAgent !== undefined &&
+    //        appState.selectedThought() !== undefined &&
+    //        thoughtIndex !== null &&
+    //        thoughtIndex > selectedAgent.thoughts.length - 1
     //    ) {
-    //        setAppState((old: typeof appState) => {
-    //            return {
-    //                ...old,
-    //                selectedThoughtIndex: old.selectedThoughtIndex ?? 1 - 1,
-    //            };
-    //        });
+    //        setAppState(old => 
+    //            old.setSelectedThought(
+    //                old._selectedThoughtIndex ?? 1 - 1
+    //            )
+    //        );
     //    }
     //}, [appState, setAppState]);
 
@@ -63,17 +64,17 @@ const ThoughtBox: FC = () => {
     //            if (event.key === "ArrowDown" || event.key === "j") {
     //                selectNextThought();
     //            }
-    //            if (event.key === "Enter" || event.key === "i") {
-    //                setSelectedThoughtEditable(true);
-    //            }
+    //            //if (event.key === "Enter" || event.key === "i") {
+    //            //    setSelectedThoughtEditable(true);
+    //            //}
     //        } else {
-    //            if (
-    //                event.key === "Escape" ||
-    //                (event.ctrlKey && event.key === "[")
-    //            ) {
-    //                console.log("setting selectedThoughtEditable to false");
-    //                setSelectedThoughtEditable(false);
-    //            }
+    //            //if (
+    //            //    event.key === "Escape" ||
+    //            //    (event.ctrlKey && event.key === "[")
+    //            //) {
+    //            //    console.log("setting selectedThoughtEditable to false");
+    //            //    setSelectedThoughtEditable(false);
+    //            //}
     //        }
     //    };
 
@@ -104,7 +105,6 @@ const ThoughtBox: FC = () => {
     }, [appState, selectedThoughtEditable]);
 
     useEffect(() => {
-        console.log("updated local thought string: ", localThoughtString);
         /*
         let newThought = Thought.fromString(localThoughtString).update({uuid: selectedThoughtUUID});
         updateSelectedThought(newThought);
@@ -131,7 +131,7 @@ const ThoughtBox: FC = () => {
                                         index
                                     );
                                     const newAppState =
-                                        old.setSelectedThough(index);
+                                        old.setSelectedThought(index);
                                     console.log(
                                         "got new app state: ",
                                         newAppState

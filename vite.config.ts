@@ -5,4 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: { exclude: ["fsevents"] },
+  define: {
+    'import.meta.env.SUPABASE_URL_JSOS': JSON.stringify(process.env.SUPABASE_URL_JSOS),
+    'import.meta.env.SUPABASE_SERVICE_ROLE_KEY_JSOS': JSON.stringify(process.env.SUPABASE_SERVICE_ROLE_KEY_JSOS),
+    'import.meta.env.OPENAI_API_KEY': JSON.stringify(process.env.OPENAI_API_KEY),
+  }
 })

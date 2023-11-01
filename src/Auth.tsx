@@ -30,10 +30,10 @@ export default function Auth() {
     }, [loading, email, currentUrl])
 
     return (
-        <form className="flex form-widget" onSubmit={handleLogin}>
+        <form className="flex form-widget h-8" onSubmit={handleLogin}>
             <p className="description pr-2">Register and/or Sign-in via magic link with your email:</p>
             <input
-                className="inputField bg-black"
+                className="inputField bg-black h-full"
                 type="email"
                 placeholder="Your email"
                 value={email}

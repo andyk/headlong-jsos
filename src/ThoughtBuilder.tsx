@@ -149,7 +149,7 @@ export const ThoughtBuilder: FC = () => {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${session.access_token}`,
             },
-            body: JSON.stringify({ promptText: resolvedPrompt }),
+            body: JSON.stringify({ promptText: appState.resolvedPrompt() }),
         })
             .then((response) => response.json())
             .then((data) => {
