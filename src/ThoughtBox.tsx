@@ -27,7 +27,7 @@ const ThoughtBox: FC = () => {
                         .selectedAgent()
                         ?.thoughts.map(([thought], index) => {
                             let className =
-                                "m-2 cursor-pointer bg-zinc-800 rounded-sm flex h-[20px] w-full";
+                                "m-2 cursor-pointer bg-zinc-800 rounded-sm flex overflow-auto w-full";
                             if (index === appState._selectedThoughtIndex) {
                                 className +=
                                     " border border-blue-600 bg-blue-950";

@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, ChangeEvent } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import { Tab, TabList, TabPanel, Tabs } from "react-tabs";
 import { List as ImmutableList, OrderedMap, Map as ImmutableMap } from "immutable";
 import { Route } from "wouter";
@@ -7,12 +7,13 @@ import openai from "./lib/openai";
 import { Session } from "@supabase/supabase-js";
 import { SessionContext } from "./SessionContext";
 import { useVarContext, JsosContextProvider } from "@andykon/jsos/src";
-import Auth from "./Auth";
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import ThoughtBox from "./ThoughtBox";
 //import { ThoughtBuilder } from "./ThoughtBuilder";
 import supabase from "./lib/supabase";
+import { Header } from "./Header";
+import { Footer } from "./Footer";
 
 const darkTheme = createTheme({
     palette: {
@@ -232,115 +233,24 @@ const defaultAppStateInst = new AppState()
 // grab relevant memories from farther back in our thought history using semantic search
 // inject summary thoughts that are "sketches" of windows of (related) thoughts
 // support actions like web search and file editing
-// gpt4(({messages: x})).then((res) => res.choices[0].message.content)`)
+// gpt4Chat(({messages: x})).then((res) => res.choices[0].message.content)`)
     .addAgent({ name: "bilbo bossy baggins", thoughts: ImmutableList() })
     .setSelectedAgent("bilbo bossy baggins")
     .addThought("i'm going to try to build an LLM agent that can do well at SWE-bench")
 
-const Header: FC = () => {
-    const [appState, setAppState] = useVarContext() as [
-        AppState,
-        (updateFn: (old: AppState) => AppState) => void
-    ];
-    const selectedAgent = appState.selectedAgent();
-
-    useEffect(() => {
-        console.log("appState updated: ", appState);
-    }, [appState]);
-
-    return (
-        <div className="md:col-span-2 w-screen md:flex border-b border-gray-700">
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="61"
-                height="49.5"
-                viewBox="0 0 61 49.5"
-                className="md:flex-none"
-            >
-                <rect
-                    x="8"
-                    y="8"
-                    width="9"
-                    height="34.5"
-                    style={{ fill: "#808080" }}
-                />
-                <rect
-                    x="23"
-                    y="8"
-                    width="9"
-                    height="34.5"
-                    style={{ fill: "#808080" }}
-                />
-                <rect
-                    x="36.5"
-                    y="33.5"
-                    width="11.5"
-                    height="9"
-                    style={{ fill: "#808080" }}
-                />
-            </svg>
-            {selectedAgent ? (
-                <>
-                <select
-                    id="agent-selector"
-                    className="bg-[#121212] border border-gray-600 px-2 m-2"
-                    value={selectedAgent.name}
-                    onChange={(event) => {
-                        const newAgentNameSelected = event.target.value;
-                        if (newAgentNameSelected) {
-                            setAppState((old: AppState) =>
-                                old.setSelectedAgent(newAgentNameSelected)
-                            );
-                        }
-                    }}
-                >
-                    {[...appState.agents.keys()].map((agentName) => (
-                        <option key={agentName} value={agentName}>
-                            {agentName}
-                        </option>
-                    ))}
-                </select>
-                <button
-                    className={"bg-slate-800 text-sm p-1 m-1"} 
-                    onClick={() => {
-                        const userInput = prompt("New Agent name", "");
-                        if (userInput) {
-                            setAppState((old: AppState) => {
-                                let updated = old.addAgent({
-                                    name: userInput,
-                                    thoughts: ImmutableList(),
-                                });
-                                updated = updated.setSelectedAgent(userInput)
-                                updated.addThought("")
-                                return updated
-                            });
-                        }
-                    }}
-                >
-                    New Agent
-                </button>
-                </>
-            ) : null}
-        </div>
-    );
-};
-
-const Footer = ({ session }: { session: Session | null }) => {
-    return (
-        <div className="md:col-span-2">
-            {!session ? (
-                <Auth />
-            ) : (
-                <div>{session.user.email}, You are logged in.</div>
-            )}
-        </div>
-    );
-};
-
 type ChatMessage = { role: "function" | "system" | "user" | "assistant", content: string } 
-const gpt4 = async (options: {messages: ChatMessage[], max_tokens?: number, temperature?: number}) => {
+const gpt4Chat = async (options: {messages: ChatMessage[], max_tokens?: number, temperature?: number}) => {
     const completion = await openai.chat.completions.create({
         model: "gpt-4",
+        messages: options.messages,
+        max_tokens: options.max_tokens ?? 50,
+        temperature: options.temperature ?? 0.5,
+    });
+    return completion;
+};
+const gpt4TurboChat = async (options: {messages: ChatMessage[], max_tokens?: number, temperature?: number}) => {
+    const completion = await openai.chat.completions.create({
+        model: "gpt-4-1106-preview",
         messages: options.messages,
         max_tokens: options.max_tokens ?? 50,
         temperature: options.temperature ?? 0.5,
@@ -369,11 +279,9 @@ function TemplateEditor() {
         AppState,
         (updateFn: (old: AppState) => AppState) => void
     ];
-    const [activeEditorTab, setActiveEditorTab] = useState(0);
-    const editorTabSelected = (index, lastIndex, event) => {
-        setActiveEditorTab(index);
-    };
+    const [shouldReeval, setShouldReeval] = useState(false);
     const [evalRes, setEvalRes] = useState({ error: null, res: null });
+
     const evalSelectedGenerator = async () => {
         const template = appState.selectedGenerator();
         if (template) {
@@ -397,17 +305,18 @@ function TemplateEditor() {
             }
         }
     };
-    useEffect(() => {
-        evalSelectedGenerator();
-    }, [appState]);
 
-    //useEffect(() => {
-    //    console.log("evalRes updated: ", evalRes)
-    //}, [evalRes])
+    useEffect(() => {
+        console.log("in useEffect, shouldReeval: ", shouldReeval);
+        if (shouldReeval) {
+            evalSelectedGenerator();
+            setShouldReeval(false);
+        }
+    }, [shouldReeval, setShouldReeval]);
 
     return (
-        <div className="overflow-auto pt-3 flex flex-col">
-            <div className="!flex w-full h-half overflow-auto">
+        <div className="overflow-auto pt-3 flex flex-col flex">
+            <div className="!flex w-full flex-1 overflow-auto">
                 <textarea
                     className="overflow-auto w-full p-2 bg-zinc-800"
                     value={appState.selectedGenerator()?.toString() || ""}
@@ -425,7 +334,7 @@ function TemplateEditor() {
                     }}
                 />
             </div>
-            <div className="mt-3 !block h-half flex-1 overflow-auto whitespace-pre-wrap">
+            <div className="mt-3 !block h-32 overflow-auto whitespace-pre-wrap">
                 {typeof evalRes.res === "string" ? evalRes.res : "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))}
             </div>
             {evalRes.error ? (
@@ -440,6 +349,7 @@ function TemplateEditor() {
                                 typeof evalRes.res === "string" ? evalRes.res : "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))
                             )
                         )
+                        setShouldReeval(true);
                     }}
                 >
                     Accept
@@ -447,7 +357,7 @@ function TemplateEditor() {
                 <button
                     className="w-32 bg-blue-900 mt-2 ml-2"
                     onClick={() => {
-                        evalSelectedGenerator()
+                        setShouldReeval(true);
                     }}
                 >
                     Regenerate
@@ -470,6 +380,26 @@ function App() {
     //) {
     //    is_andy = true;
     //}
+    useEffect(() => {
+        /* Listen for keyboard shortcuts. */
+        const handleKeyDown = (event) => {
+            if (
+                event.key === "Escape" ||
+                (event.ctrlKey && event.key === "[")
+            ) {
+                console.log("setting selectedThoughtEditable to false");
+                setSelectedThoughtEditable(false);
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+
+        // cleanup on unmount
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, []);
+
     return (
         <ThemeProvider theme={darkTheme}>
             <CssBaseline />
@@ -488,7 +418,7 @@ function App() {
                                 <ThoughtBox />
                             </div>
                             <div className="overflow-auto flex">
-                                <div className="container grid grid-rows-[30px_1fr_30px] overflow-auto w-full">
+                                <div className="container grid grid-rows-[30px_1fr] overflow-auto w-full">
                                     <TemplateSelector />
                                     <TemplateEditor />
                                 </div>
