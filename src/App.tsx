@@ -1,12 +1,12 @@
 import { FC, useState, useEffect, ChangeEvent } from "react";
 import { Tab, TabList, TabPanel, Tabs } from "react-tabs";
-import { OrderedMap, Map as ImmutableMap } from "immutable";
+import { List as ImmutableList, OrderedMap, Map as ImmutableMap } from "immutable";
 import { Route } from "wouter";
 import "./App-compiled.css";
 import openai from "./lib/openai";
 import { Session } from "@supabase/supabase-js";
 import { SessionContext } from "./SessionContext";
-import { useVarContext, JsosContextProvider, JsosUI } from "@andykon/jsos/src";
+import { useVarContext, JsosContextProvider } from "@andykon/jsos/src";
 import Auth from "./Auth";
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
@@ -29,7 +29,7 @@ type Thought = {
 };
 type ThoughtChangeHistory = Thought[]; // newest first
 type AgentName = string;
-type ThoughtList = [Thought, ThoughtChangeHistory][];
+type ThoughtList = ImmutableList<[Thought, ThoughtChangeHistory]>;
 type Agent = {
     name: string;
     thoughts: ThoughtList;
@@ -119,7 +119,7 @@ export class AppState {
     setSelectedThought(selectedThoughtIndex: number): AppState {
         return this.copy({ selectedThoughtIndex });
     }
-    addAgent(agent: Agent): AppState {
+    addAgent(agent: Agent, setAsSelected: boolean = true): AppState {
         const ag = {
             name: agent.name,
             thoughts: agent.thoughts,
@@ -128,23 +128,26 @@ export class AppState {
         const agents = this.agents.set(agent.name, ag);
         if (agents.size === 1) {
             return this.copy({ selectedAgentName: agent.name, agents: agents });
+        } else if (setAsSelected) {
+            return this.copy({ agents, selectedAgentName: agent.name })
+        } else {
+            return this.copy({ agents });
         }
-        return this.copy({ agents });
     }
-    addThought(thought: string): AppState {
-        let selectedThoughtIndex = 0;
+    // Insert at Index, shifting others forward. If index is not provided, insert after currently selected (if any) or at end.
+    addThought(thought: string, index?: number): AppState {
+        let targetIndex: number | undefined;
+        if (index !== undefined) {
+            targetIndex = index;
+        } else if (this._selectedThoughtIndex) {
+            targetIndex = this._selectedThoughtIndex + 1;
+        }
         const agents = this.agents.updateIn(
             [this._selectedAgentName, "thoughts"],
             (thoughts) => {
-                console.log("in this.agents.updateIn, thoughts: ", thoughts);
-                const castedThoughts = thoughts as ThoughtList;
-                selectedThoughtIndex = castedThoughts.length;
-                console.log(
-                    "updating selectedThoughtIndex to: ",
-                    selectedThoughtIndex
-                );
-                return [
-                    ...castedThoughts,
+                const castedThoughts = (thoughts as ThoughtList) ?? ImmutableList();
+                const withInserted = castedThoughts.insert(
+                    targetIndex ?? castedThoughts.size,
                     [
                         {
                             timestamp: new Date(),
@@ -154,10 +157,24 @@ export class AppState {
                         },
                         [],
                     ],
-                ];
+                );
+                return withInserted;
             }
         );
-        return this.copy({ agents, selectedThoughtIndex });
+        return this.copy({ agents, selectedThoughtIndex: index ?? targetIndex ?? 1});
+    }
+    // if no index provided, delete currently selected thought (if set) or last thought
+    deleteThought(index?: number): AppState {
+        const agents = this.agents.updateIn(
+            [this._selectedAgentName, "thoughts"],
+            (thoughts) => {
+                const castedThoughts = thoughts as ThoughtList;
+                const targetIndex = index ?? this._selectedThoughtIndex ?? castedThoughts.size - 1;
+                console.log("deleting thought at index: ", targetIndex)
+                return castedThoughts.delete(targetIndex);
+            }
+        );
+        return this.copy({ agents, selectedThoughtIndex: (this._selectedThoughtIndex ?? 1) - 1});
     }
     setTemplate(name: string, template: string): AppState {
         const templates = this.templates.set(name, template);
@@ -200,7 +217,7 @@ export class AppState {
     }
 }
 const defaultAppStateInst = new AppState()
-    .addAgent({ name: "zany zoo zepplin", thoughts: [] })
+    .addAgent({ name: "zany zoo zepplin", thoughts: ImmutableList() })
     .addThought("it's dinner time")
     .addThought("i'm very hungry")
     .addThought("i should get dinner soon")
@@ -211,12 +228,14 @@ const defaultAppStateInst = new AppState()
     .addThought("i hope it arrives soon, i'm starving")
     .addThought("i'll go set the table while i wait for the food to arrive")
     .addThought("i can't wait to eat, it smells so good")
-    .setTemplate("main", `//let x = appState.selectedAgent().thoughts.map(([thought, history]) => ({role: "assistant", content: thought.body}))
-appState
+    .setTemplate("main", `let x = appState.selectedAgent().thoughts.map(([thought, history]) => ({role: "assistant", content: thought.body}))
 // grab relevant memories from farther back in our thought history using semantic search
-// do summarizing
-// support web search
-//gpt4(x).then((res) => res.choices[0].message.content)`)
+// inject summary thoughts that are "sketches" of windows of (related) thoughts
+// support actions like web search and file editing
+// gpt4(({messages: x})).then((res) => res.choices[0].message.content)`)
+    .addAgent({ name: "bilbo bossy baggins", thoughts: ImmutableList() })
+    .setSelectedAgent("bilbo bossy baggins")
+    .addThought("i'm going to try to build an LLM agent that can do well at SWE-bench")
 
 const Header: FC = () => {
     const [appState, setAppState] = useVarContext() as [
@@ -261,6 +280,7 @@ const Header: FC = () => {
                 />
             </svg>
             {selectedAgent ? (
+                <>
                 <select
                     id="agent-selector"
                     className="bg-[#121212] border border-gray-600 px-2 m-2"
@@ -280,6 +300,26 @@ const Header: FC = () => {
                         </option>
                     ))}
                 </select>
+                <button
+                    className={"bg-slate-800 text-sm p-1 m-1"} 
+                    onClick={() => {
+                        const userInput = prompt("New Agent name", "");
+                        if (userInput) {
+                            setAppState((old: AppState) => {
+                                let updated = old.addAgent({
+                                    name: userInput,
+                                    thoughts: ImmutableList(),
+                                });
+                                updated = updated.setSelectedAgent(userInput)
+                                updated.addThought("")
+                                return updated
+                            });
+                        }
+                    }}
+                >
+                    New Agent
+                </button>
+                </>
             ) : null}
         </div>
     );
@@ -298,12 +338,12 @@ const Footer = ({ session }: { session: Session | null }) => {
 };
 
 type ChatMessage = { role: "function" | "system" | "user" | "assistant", content: string } 
-const gpt4 = async (messages: ChatMessage[]) => {
+const gpt4 = async (options: {messages: ChatMessage[], max_tokens?: number, temperature?: number}) => {
     const completion = await openai.chat.completions.create({
         model: "gpt-4",
-        messages: messages,
-        max_tokens: 20,
-        temperature: 0,
+        messages: options.messages,
+        max_tokens: options.max_tokens ?? 50,
+        temperature: options.temperature ?? 0.5,
     });
     return completion;
 };
@@ -391,84 +431,30 @@ function TemplateEditor() {
             {evalRes.error ? (
                 <div className="bg-red-900 p-3">{evalRes.error}</div>
             ) : null}
-            <button
-                className="w-32 bg-green-900 mt-2"
-                onClick={() => {
-                    setAppState(old =>
-                        old.addThought(
-                            typeof evalRes.res === "string" ? evalRes.res : "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))
+            <div className="inline-flex">
+                <button
+                    className="w-32 bg-green-900 mt-2"
+                    onClick={() => {
+                        setAppState(old =>
+                            old.addThought(
+                                typeof evalRes.res === "string" ? evalRes.res : "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))
+                            )
                         )
-                    )
-                }}
-            >
-                Accept
-            </button>
-            <button
-                className="w-32 bg-green-900 mt-2"
-                onClick={() => {
-                    evalSelectedGenerator()
-                }}
-            >
-                Regenerate
-            </button>
+                    }}
+                >
+                    Accept
+                </button>
+                <button
+                    className="w-32 bg-blue-900 mt-2 ml-2"
+                    onClick={() => {
+                        evalSelectedGenerator()
+                    }}
+                >
+                    Regenerate
+                </button>
+            </div>
         </div>
     );
-    //return (
-    //    <div className="overflow-auto flex flex-col">
-    //        <Tabs
-    //            className="overflow-auto flex-auto flex flex-col"
-    //            onSelect={editorTabSelected}
-    //        >
-    //            <TabList className="pt-1 mb-3 ml-1">
-    //                <Tab
-    //                    className={
-    //                        "cursor-pointer inline" +
-    //                        (activeEditorTab === 0
-    //                            ? " border-b-white border-b-2"
-    //                            : "")
-    //                    }
-    //                >
-    //                    Edit
-    //                </Tab>
-    //                <Tab
-    //                    className={
-    //                        "cursor-pointer inline ml-3" +
-    //                        (activeEditorTab === 1
-    //                            ? " border-b-white border-b-2"
-    //                            : "")
-    //                    }
-    //                >
-    //                    Preview
-    //                </Tab>
-    //            </TabList>
-    //            <TabPanel
-    //                selectedClassName="!flex w-full h-full overflow-auto"
-    //                className="hidden"
-    //            >
-    //                <textarea
-    //                    className="overflow-auto w-full p-2 bg-zinc-800"
-    //                    value={appState.selectedGenerator()?.toString() || ""}
-    //                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => {
-    //                        const newVal = e.target.value;
-    //                        console.log("calling old.updateSelectedGenerator(" + newVal + ")");
-    //                        setAppState((old) => {
-    //                            console.log("in setAppState, updating to: ", )
-    //                            return old.updateSelectedGenerator(newVal);
-    //                        })
-    //                    }} />
-    //            </TabPanel>
-    //            <TabPanel
-    //                    selectedClassName="!block flex-1 overflow-auto whitespace-pre-wrap"
-    //                    className="hidden"
-    //                >
-    //                    {evalRes?.res || null}
-    //                </TabPanel>
-    //        </Tabs>
-    //        {evalRes.error ? (
-    //            <div className="bg-red-900 p-3">{evalRes.error}</div>
-    //        ) : null }
-    //    </div>
-    //)
 }
 
 function App() {
@@ -493,11 +479,12 @@ function App() {
                     namespace="headlong-vite-v2"
                     defaultVal={defaultAppStateInst}
                     supabaseClient={supabase}
+                    overwriteExisting={false}
                 >
                     <div className="container 2 md:h-screen md:grid md:gap-3 md:grid-cols-2 grid-rows-[50px_minmax(300px,_1fr)_30px]">
                         <Header />
                         <Route path="/">
-                            <div className="overflow-auto grid grid-rows-[1fr_60px]">
+                            <div className="overflow-auto grid grid-rows-[1fr]">
                                 <ThoughtBox />
                             </div>
                             <div className="overflow-auto flex">
