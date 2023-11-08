@@ -307,12 +307,41 @@ function TemplateEditor() {
     };
 
     useEffect(() => {
-        console.log("in useEffect, shouldReeval: ", shouldReeval);
         if (shouldReeval) {
             evalSelectedGenerator();
             setShouldReeval(false);
         }
     }, [shouldReeval, setShouldReeval]);
+
+    useEffect(() => {
+        /* Listen for keyboard shortcuts. */
+        const handleKeyDown = (event) => {
+            if (event.ctrlKey && event.key === "r") {
+                setShouldReeval(true);
+            }
+            if (event.ctrlKey && event.key === " ") {
+                acceptThought();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+
+        // cleanup on unmount
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, []);
+
+    const acceptThought = () => {
+        setAppState(old => old.addThought(
+            typeof evalRes.res === "string" ? (
+                evalRes.res
+            ) : (
+                "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))
+            )
+        ));
+        setShouldReeval(true);
+    };
 
     return (
         <div className="overflow-auto pt-3 flex flex-col flex">
@@ -343,14 +372,7 @@ function TemplateEditor() {
             <div className="inline-flex">
                 <button
                     className="w-32 bg-green-900 mt-2"
-                    onClick={() => {
-                        setAppState(old =>
-                            old.addThought(
-                                typeof evalRes.res === "string" ? evalRes.res : "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))
-                            )
-                        )
-                        setShouldReeval(true);
-                    }}
+                    onClick={acceptThought}
                 >
                     Accept
                 </button>
@@ -380,25 +402,6 @@ function App() {
     //) {
     //    is_andy = true;
     //}
-    useEffect(() => {
-        /* Listen for keyboard shortcuts. */
-        const handleKeyDown = (event) => {
-            if (
-                event.key === "Escape" ||
-                (event.ctrlKey && event.key === "[")
-            ) {
-                console.log("setting selectedThoughtEditable to false");
-                setSelectedThoughtEditable(false);
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-
-        // cleanup on unmount
-        return () => {
-            window.removeEventListener("keydown", handleKeyDown);
-        };
-    }, []);
 
     return (
         <ThemeProvider theme={darkTheme}>
