@@ -1,4 +1,4 @@
-import { useState, useEffect, ChangeEvent } from "react";
+import { useState, useEffect, ChangeEvent, useCallback } from "react";
 import { Tab, TabList, TabPanel, Tabs } from "react-tabs";
 import { List as ImmutableList, OrderedMap, Map as ImmutableMap } from "immutable";
 import { Route } from "wouter";
@@ -313,6 +313,21 @@ function TemplateEditor() {
         }
     }, [shouldReeval, setShouldReeval]);
 
+    const parseEvalRes = useCallback(() => {
+        console.log("in parseEvalRes, evalRes.res is ", evalRes.res)
+        if (typeof evalRes.res === "string") {
+            return evalRes.res
+        } else {
+            return "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))
+        }
+    }, [evalRes.res]);
+
+    const acceptThought = useCallback(() => {
+        const res = parseEvalRes();
+        setAppState(old => old.addThought(res));
+        setShouldReeval(true);
+    }, [parseEvalRes]);
+
     useEffect(() => {
         /* Listen for keyboard shortcuts. */
         const handleKeyDown = (event) => {
@@ -330,18 +345,7 @@ function TemplateEditor() {
         return () => {
             window.removeEventListener("keydown", handleKeyDown);
         };
-    }, []);
-
-    const acceptThought = () => {
-        setAppState(old => old.addThought(
-            typeof evalRes.res === "string" ? (
-                evalRes.res
-            ) : (
-                "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))
-            )
-        ));
-        setShouldReeval(true);
-    };
+    }, [acceptThought]);
 
     return (
         <div className="overflow-auto pt-3 flex flex-col flex">
@@ -364,7 +368,7 @@ function TemplateEditor() {
                 />
             </div>
             <div className="mt-3 !block h-32 overflow-auto whitespace-pre-wrap">
-                {typeof evalRes.res === "string" ? evalRes.res : "Object found, stringifying it: " + JSON.stringify((evalRes?.res || ""))}
+                {parseEvalRes()}
             </div>
             {evalRes.error ? (
                 <div className="bg-red-900 p-3">{evalRes.error}</div>
