@@ -10,6 +10,7 @@ import { useVarContext, JsosContextProvider } from "@andykon/jsos/src";
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import ThoughtBox from "./ThoughtBox";
+//import ThoughtBox2 from "./ThoughtBox2";
 //import { ThoughtBuilder } from "./ThoughtBuilder";
 import supabase from "./lib/supabase";
 import { Header } from "./Header";
@@ -46,14 +47,21 @@ type TemplateName = string;
 type Template = string; // The string should be javascript that returns a string type.
 type TemplateMap = ImmutableMap<TemplateName, Template>; // Map from `fn.name` => `fn`
 
+// Actions are used to signal to unconscious action handlers that they should
+// take actioa asynchronously.  Then they can optionally inject thoughts
+// (including other actions and observations) back into the agent's `thoughts`
+// stream.
+type Action = { name: string; thoughtIndex: number };
+
 // An agent has arbitrary many Templates and a special "entry" template
 // which we call call its "thoughtGenerator", so agent keeps a property with
-// the name of it's thoughtGenerator template: `agent.thoughtGeneartorName`.
+// the name of it's thoughtGenerator template: `agent.thoughtGeneratorName`.
 export class AppState {
     _selectedAgentName: string | null; // Name of selected agent
     _selectedThoughtIndex: number | null; // index into appState.agents[appState.selectedAgent].thoughts
     agents: AgentMap;
     templates: TemplateMap;
+    pendingActions: Action[];
 
     constructor(
         selectedAgentName?: string | null,
@@ -65,6 +73,7 @@ export class AppState {
         this._selectedThoughtIndex = selectedThoughtIndex ?? null;
         this.agents = agents ?? OrderedMap();
         this.templates = templates ?? ImmutableMap();
+        this.pendingActions = [];
     }
 
     copy(options: {
@@ -72,6 +81,7 @@ export class AppState {
         selectedThoughtIndex?: number | null;
         agents?: AgentMap | null;
         templates?: TemplateMap | null;
+        pendingActions?: Action[];
     }) {
         // https://stackoverflow.com/questions/64638771/how-can-i-create-a-new-instance-of-a-class-using-this-from-within-method
         // till we support closing over global state, functions need to close over only state attached to `this`.
@@ -79,12 +89,14 @@ export class AppState {
             selectedAgentName?: string | null,
             selectedThoughtIndex?: number | null,
             agents?: AgentMap | null,
-            templates?: TemplateMap | null
+            templates?: TemplateMap | null,
+            pendingActions?: Action[]
         ) => this)(
             options.selectedAgentName ?? this._selectedAgentName,
             options.selectedThoughtIndex ?? this._selectedThoughtIndex,
             options.agents ?? this.agents,
-            options.templates ?? this.templates
+            options.templates ?? this.templates,
+            options.pendingActions ?? this.pendingActions
         );
     }
     selectedAgent(): Agent | undefined {

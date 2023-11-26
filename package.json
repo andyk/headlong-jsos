@@ -36,6 +36,7 @@
     "react-window": "^1.8.8",
     "socket.io-client": "^4.6",
     "styled-components": "^5.3.9",
+    "ts-node": "^10.9.1",
     "typescript": "^5.0.4",
     "wouter": "^2.11.0"
   },
