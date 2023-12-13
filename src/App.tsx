@@ -30,13 +30,13 @@ type Thought = {
     open_ai_embedding: number[];
 };
 type ThoughtChangeHistory = Thought[]; // newest first
-type AgentName = string;
 type ThoughtList = ImmutableList<[Thought, ThoughtChangeHistory]>;
 type Agent = {
     name: string;
     thoughts: ThoughtList;
     thoughtGeneratorName?: TemplateName;
 }; // default thoughtGeneratorName is 'main'
+type AgentName = string;
 type AgentMap = OrderedMap<AgentName, Agent>;
 
 // A Template is a Javascript function that returns a string.
@@ -242,10 +242,32 @@ const defaultAppStateInst = new AppState()
     .addThought("i'll go set the table while i wait for the food to arrive")
     .addThought("i can't wait to eat, it smells so good")
     .setTemplate("main", `let x = appState.selectedAgent().thoughts.map(([thought, history]) => ({role: "assistant", content: thought.body}))
-// grab relevant memories from farther back in our thought history using semantic search
-// inject summary thoughts that are "sketches" of windows of (related) thoughts
-// support actions like web search and file editing
-// gpt4Chat(({messages: x})).then((res) => res.choices[0].message.content)`)
+
+    // TODOs:
+    // - grab relevant memories from farther back in our thought history using semantic search
+    // - inject summary thoughts that are "sketches" of windows of (related) thoughts
+    // - support actions like web search and file editing
+    /**************************************************
+    ****************************************************/
+    let msg;
+    
+    if (x.get(x.size-1).content.startsWith("action:")) {
+        setAppState(old => {
+             old.pendingActions = [{agentName: old._selectedAgentName, thoughtIndex: old._selectedThoughtIndex}];
+            return old;
+        });
+        msg = "waiting for action to be executed";
+    } else {
+        const msgsWithSysPrompt = [
+            {role: "system", content: "Come up with the next thought based on the follwoing stream of thoughts"},
+            ...x
+        ]
+        msg = gpt4TurboChat(({messages: msgsWithSysPrompt})).then((res) => res.choices[0].message.content)
+    }
+    /********************************************************
+    *********************************************************/
+    msg
+    //gpt4TurboChat(({messages: x})).then((res) => res.choices[0].message.content)`)
     .addAgent({ name: "bilbo bossy baggins", thoughts: ImmutableList() })
     .setSelectedAgent("bilbo bossy baggins")
     .addThought("i'm going to try to build an LLM agent that can do well at SWE-bench")
@@ -387,18 +409,18 @@ function TemplateEditor() {
             ) : null}
             <div className="inline-flex">
                 <button
-                    className="w-32 bg-green-900 mt-2"
-                    onClick={acceptThought}
-                >
-                    Accept
-                </button>
-                <button
-                    className="w-32 bg-blue-900 mt-2 ml-2"
+                    className="w-32 bg-blue-900 mt-2"
                     onClick={() => {
                         setShouldReeval(true);
                     }}
                 >
-                    Regenerate
+                    [Re]run
+                </button>
+                <button
+                    className="w-32 bg-green-900 mt-2 ml-2"
+                    onClick={acceptThought}
+                >
+                    Accept
                 </button>
             </div>
         </div>
