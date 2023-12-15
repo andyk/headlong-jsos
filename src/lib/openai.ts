@@ -1,9 +1,10 @@
 
 import OpenAI from "openai";
+const openAiOrg = process.env.OPENAI_ORG;
 const openAiApiKey = import.meta.env.OPENAI_API_KEY;
 console.log("openAiApiKey: ", openAiApiKey);
 const openai = new OpenAI({
-    organization: "org-xkUPwPnGtvhd3NwlPfc9yllF",
+    organization: openAiOrg,
     apiKey: openAiApiKey,
     dangerouslyAllowBrowser: true
 });
