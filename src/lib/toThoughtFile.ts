@@ -29,7 +29,7 @@ async function syncVar(params: SyncVarParams): Promise<void> {
 
     headlong.agents.forEach((name, agent) => { 
         const filePath = path.join(dirPath, `${name}.json`);
-        fs.writeFileSync(filePath, agent.thoughts.map(([thought, history]) => thought.body.join('\n') );
+        fs.writeFileSync(filePath, agent.thoughts.map(([thought, history]) => thought.body.join('\n')));
         console.log(`Var ${params.varName} has been synced to ${filePath}`);
     })
 }
